@@ -12,9 +12,18 @@ extern "C" {
 #include <libekb.H>
 #include <error_info_defs.H>
 
+#include <targeting/target_service.H>
+#include <targeting/predicates/predicateattrval.H>
+#include <targeting/predicates/predicateisfunctional.H>
+#include <targeting/predicates/predicatepostfixexpr.H>
+#include <targeting/target.H>
+#include <targeting/xmltohb/attributeenums.H>
+#include <targeting/xmltohb/attributetraits.H>
+
 #include <ekb/hwpf/fapi2/include/return_code_defs.H>
 #include <ekb/chips/p10/procedures/hwp/istep/p10_do_fw_hb_istep.H>
 #include <ekb/chips/p10/procedures/hwp/sbe/p10_get_sbe_msg_register.H>
+
 
 bool ipl_is_master_proc(struct pdbg_target *proc)
 {
@@ -37,6 +46,25 @@ bool ipl_is_master_proc(struct pdbg_target *proc)
 
 	return false;
 }
+
+bool ipl_is_master_proc(TARGETING::ConstTargetPtr proc)
+{
+    using namespace TARGETING;
+
+    AttributeTraits<ATTR_PROC_MASTER_TYPE>::Type val =  PROC_MASTER_TYPE_INVALID;
+
+    if(!proc->tryGetAttr<ATTR_PROC_MASTER_TYPE>(val))
+    {
+
+        std::cout << "DEMO inside is_master_proc trygetattr ATTR_PROC_MASTER_TYPE failed\n";
+        //TODO log an error
+        return false;
+    }
+    
+    std::cout << "DEMO is_master_proc: " << static_cast<PROC_MASTER_TYPE>(val) << std::endl;
+    return (static_cast<PROC_MASTER_TYPE>(val) == PROC_MASTER_TYPE_ACTING_MASTER);
+}
+
 
 int ipl_istep_via_sbe(int major, int minor)
 {
@@ -88,8 +116,8 @@ int ipl_istep_via_sbe(int major, int minor)
 int ipl_istep_via_hostboot(int major, int minor)
 {
 	struct pdbg_target *proc;
-	uint64_t retry_limit_ms = 30 * 60 * 1000;
-	uint64_t delay_ms = 100;
+	[[maybe_unused]] uint64_t retry_limit_ms = 30 * 60 * 1000;
+	[[maybe_unused]] int64_t delay_ms = 100;
 	int rc = 1;
 
 	ipl_log(IPL_INFO, "Istep: Hostboot %d.%d : started\n", major, minor);
@@ -114,8 +142,8 @@ int ipl_istep_via_hostboot(int major, int minor)
 			"Running p10_do_fw_hb_istep HWP on processor %d\n",
 			pdbg_target_index(proc));
 
-		fapi_rc = p10_do_fw_hb_istep(proc, major, minor, retry_limit_ms,
-					     delay_ms);
+//		fapi_rc = p10_do_fw_hb_istep(proc, major, minor, retry_limit_ms,
+//					     delay_ms);
 		if (fapi_rc != fapi2::FAPI2_RC_SUCCESS)
 			ipl_log(IPL_ERROR,
 				"Istep %d.%d failed on chip %d, rc=%d\n", major,
@@ -135,11 +163,11 @@ bool ipl_sbe_booted(struct pdbg_target *proc, uint32_t wait_time_seconds)
 	sbeMsgReg_t sbeReg;
 	fapi2::ReturnCode fapi_rc;
 	uint32_t loopcount;
-
+    sbeReg.sbeBooted = 1;
 	loopcount = wait_time_seconds > 0 ? wait_time_seconds : 25;
 
 	while (loopcount > 0) {
-		fapi_rc = p10_get_sbe_msg_register(proc, sbeReg);
+//		fapi_rc = p10_get_sbe_msg_register(proc, sbeReg);
 		if (fapi_rc == fapi2::FAPI2_RC_SUCCESS) {
 			if (sbeReg.sbeBooted) {
 				ipl_log(IPL_INFO,
@@ -197,6 +225,17 @@ bool ipl_is_present(struct pdbg_target *target)
 	return (buf[4] & 0x40);
 }
 
+bool ipl_is_present(TARGETING::ConstTargetPtr target)
+{
+    using namespace TARGETING;
+    AttributeTraits<ATTR_HWAS_STATE>::Type hwas{};
+        
+    if(!target->tryGetAttr<ATTR_HWAS_STATE>(hwas))
+        return false;
+    
+    return hwas.present;
+}
+
 bool ipl_is_functional(struct pdbg_target *target)
 {
 	uint8_t buf[5];
@@ -215,6 +254,17 @@ bool ipl_is_functional(struct pdbg_target *target)
 	// isFuntional bit is stored in 4th byte and bit 3 position in
 	// HWAS_STATE
 	return (buf[4] & 0x20);
+}
+
+bool ipl_is_functional(TARGETING::ConstTargetPtr target)
+{
+    using namespace TARGETING;
+    AttributeTraits<ATTR_HWAS_STATE>::Type hwas{};
+ 
+    if(!target->tryGetAttr<ATTR_HWAS_STATE>(hwas))
+        return false;
+
+    return hwas.functional;
 }
 
 bool ipl_check_functional_master(void)
@@ -237,6 +287,47 @@ bool ipl_check_functional_master(void)
 	return true;
 }
 
+bool ipl_is_functional_master(void)
+{
+    using namespace TARGETING;
+
+    auto& ts = TARGETING::TargetService::instance();
+    auto top = ts.getTopLevelTarget();
+
+    PredicateAttrVal<ATTR_TYPE> pred(TYPE_PROC);
+
+    for (auto&& proc :
+            ts.getAssociated(top, AssociationType::childByPhysical,
+                             RecursionLevel::all, &pred))
+    {
+        EntityPath path;
+        if (proc->tryGetAttr<ATTR_PHYS_PATH>(path))
+        {
+            std::cout << "DEMO: proc path:  " << path.toString() << "\n";
+        }
+        else
+        {
+            std::cout << "DEMO: ATTR_PHYS_PATH not found " << std::endl;
+        }
+        
+        if (!ipl_is_master_proc(proc))
+        {
+            std::cout << "DEMO: Not master, skipping\n";
+            continue;
+        }        
+		if (!ipl_is_functional(proc))
+        {
+            std::cout << "DEMO: Master proc not functional\n";
+            /*TODO ipl_log(IPL_ERROR,
+                    "Master processor(%d) is not functional\n",
+                    pdbg_target_index(proc));*/
+            break;
+        }
+        return true;
+    }
+    return false;
+}
+
 struct pdbg_target *ipl_get_functional_primary_proc(void)
 {
 	struct pdbg_target *proc = NULL;
@@ -255,6 +346,40 @@ struct pdbg_target *ipl_get_functional_primary_proc(void)
 		return proc;
 	}
 	return NULL;
+}
+
+[[maybe_unused]] TARGETING::TargetPtr get_functional_primary_proc(void)
+{
+    using namespace TARGETING;
+
+    auto& ts = TARGETING::TargetService::instance();
+    auto top = ts.getTopLevelTarget();
+
+    PredicateAttrVal<ATTR_TYPE> pred(TYPE_PROC);
+
+    for (auto&& proc :
+            ts.getAssociated(top, AssociationType::childByPhysical,
+                             RecursionLevel::all, &pred))
+    {
+        if (!ipl_is_master_proc(proc))
+        {
+            std::cout << "DEMO getfunctionalprimaryproc,not master proc, continuing\n";
+            continue;
+        }
+		if (!ipl_is_functional(proc)) 
+        {
+            
+            std::cout << "DEMO getfunctionalprimaryproc master but non-functional\n";
+			/*TODO ipl_log(IPL_ERROR,
+				"Primary processor(%d) is not functional\n",
+				pdbg_target_index(proc));*/
+			return nullptr;
+		}
+		return proc;
+	}
+
+    std::cout << "DEMO getfunctionalprimaryproc, No proc targets\n";
+	return nullptr;
 }
 
 void ipl_log_sbe_ffdc(struct pdbg_target *pib)
@@ -402,6 +527,74 @@ void ipl_process_fapi_error(const fapi2::ReturnCode &fapirc,
 		ipl_log(IPL_ERROR, "Unknown fapi error 0x%08X, ignoring\n",
 			fapirc);
 	}
+}
+
+[[maybe_unused]] void ipl_process_fapi_error(const fapi2::ReturnCode &fapirc,
+                            TARGETING::ConstTargetPtr target, bool deconfig)
+{
+/*
+	if (fapirc == fapi2::FAPI2_RC_SUCCESS) {
+		ipl_error_callback(IPL_ERR_OK);
+	} else if (fapirc.getCreator() == fapi2::ReturnCode::CREATOR_PLAT) {
+		CDG_Target cdgTarget;
+		cdgTarget.callout_priority =
+		    fapi2::plat_CalloutPriority_tostring(
+			fapi2::CalloutPriorities::MEDIUM);
+        
+        using namespace TARGETING;
+        AttributeTraits<ATTR_PHYS_PATH>::Type physBinPath{}; 
+        
+        //TODO  -     : error: array must be initialized with a brace-enclosed initializer
+                               o_attrValue = static_cast<T>(temp);To be fixed in target_tmpl.H
+        try
+        {
+            physBinPath = target->getAttrAsArray<ATTR_PHYS_PATH>();
+        }
+        catch(std::exception& ex)
+        {
+            std::cerr << "Exception: " << ex.what() << "\n"; 
+            //TODO ipl_log(
+            IPL_ERROR,
+            "Failed to read ATTR_PHYS_BIN_PATH for target %s\n",
+            pdbg_target_path(target));
+            ipl_error_callback(IPL_ERR_ATTR_READ_FAIL);
+            return ;
+        }
+
+		uint32_t binPathElemCount =
+		    dtAttr::fapi2::ATTR_PHYS_BIN_PATH_ElementCount;
+
+        std::copy(
+            physBinPath.begin(), physBinPath.begin() + binPathElemCount,
+            std::back_inserter(cdgTarget.target_entity_path));
+        cdgTarget.deconfigure = deconfig;
+
+        FFDC ffdc;
+        ffdc.hwp_errorinfo.cdg_targets.push_back(cdgTarget);
+        ffdc.ffdc_type = FFDC_TYPE_HWP;
+        uint32_t rc = fapirc;
+        ffdc.hwp_errorinfo.rc = std::to_string(rc);
+        ffdc.hwp_errorinfo.rc_desc =
+            "Error in executing platform function";
+
+        ProcedureCallout proc_callout;
+        proc_callout.proc_callout =
+            fapi2::plat_ProcedureCallout_tostring(
+            fapi2::ProcedureCallouts::ProcedureCallout::
+                BUS_CALLOUT);
+        proc_callout.callout_priority =
+            fapi2::plat_CalloutPriority_tostring(
+            fapi2::CalloutPriorities::CalloutPriority::
+                MEDIUM);
+        ffdc.hwp_errorinfo.procedures_callout.push_back(
+            proc_callout);
+        ipl_error_callback({IPL_ERR_PLAT, &ffdc});
+	} else if (fapirc.getCreator() == fapi2::ReturnCode::CREATOR_HWP) {
+		ipl_error_callback(IPL_ERR_HWP);
+	} else {
+		ipl_log(IPL_ERROR, "Unknown fapi error 0x%08X, ignoring\n",
+			fapirc);
+	}*/
 }
 
 /**

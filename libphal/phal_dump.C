@@ -335,7 +335,7 @@ void executeSbeExtractRc(struct pdbg_target* target,
 	} else if (PROC_SBE_DUMP == sbeTypeId) {
 		// p10_extract_sbe_rc is returning the error along with
 		// recovery action, so not checking the fapirc.
-		fapiRc = p10_extract_sbe_rc(target, recovAction, true);
+		//fapiRc = p10_extract_sbe_rc(target, recovAction, true);
 		targetTypeString = "proc";
 	}
 	log(level::INFO,
@@ -410,7 +410,7 @@ void collectLocalRegDump(struct pdbg_target* target,
 		    ody_sbe_localreg_dump(target, true, sbeScomRegValueOdy);
 	} else if (PROC_SBE_DUMP == sbeTypeId) {
 		hwpName = "p10_sbe_localreg_dump";
-		fapiRc = p10_sbe_localreg_dump(target, true, sbeScomRegValue);
+		//fapiRc = p10_sbe_localreg_dump(target, true, sbeScomRegValue);
 	}
 	if (fapiRc != FAPI2_RC_SUCCESS) {
 		log(level::ERROR, "Failed in %s for proc=%s, rc=0x%08X", target,
@@ -493,7 +493,7 @@ void collectPIBMSRegDump(struct pdbg_target* target,
 			regv.reg = reg;
 			pibmsRegSet.emplace_back(regv);
 		}
-		fapiRc = p10_pibms_reg_dump(target, pibmsRegSet);
+		//fapiRc = p10_pibms_reg_dump(target, pibmsRegSet);
 		hwpName = "p10_pibms_reg_dump";
 	} else if (ODYSSEY_SBE_DUMP == sbeTypeId) {
 		for (auto& reg : pibms_regs_2dump_ody) {
@@ -593,9 +593,9 @@ void collectPIBMEMDump(struct pdbg_target* target,
 	std::string hwpName;
 
 	if (PROC_SBE_DUMP == sbeTypeId) {
-		fapiRc = p10_pibmem_dump(target, pibmemDumpStartByte,
+		/*fapiRc = p10_pibmem_dump(target, pibmemDumpStartByte,
 					 pibmemDumpNumOfByte, userOptions,
-					 pibmemContents, eccEnable);
+					 pibmemContents, eccEnable);*/
 		hwpName = "p10_pibmem_dump";
 	} else if (ODYSSEY_SBE_DUMP == sbeTypeId) {
 		fapiRc = ody_pibmem_dump(target, pibmemDumpStartByte,
@@ -683,9 +683,9 @@ void collectPPEState(struct pdbg_target* target,
 	ReturnCode fapiRc;
 
 	if (sbeTypeId == PROC_SBE_DUMP) {
-		fapiRc =
+		/*fapiRc =
 		    p10_ppe_state(target, type, instanceNum, mode, ppeGprsValue,
-				  ppeSprsValue, ppeXirsValue);
+				  ppeSprsValue, ppeXirsValue);*/
 		hwpName = "p10_ppe_state";
 	} else if (sbeTypeId == ODYSSEY_SBE_DUMP) {
 		fapiRc = ody_ppe_state(target, type, instanceNum, modeOdy,

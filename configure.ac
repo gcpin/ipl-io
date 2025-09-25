@@ -62,6 +62,16 @@ if test x"$ac_cv_lib_pdbg_pdbg_targets_init" != "xyes" ; then
 	AC_MSG_ERROR([PDBG library not found])
 fi
 
+# --- Dependency checks (replacing pdbg) ---
+PKG_CHECK_MODULES([TARGETING],   [libtargeting])
+PKG_CHECK_MODULES([HWACCESS],    [libhwaccess])
+PKG_CHECK_MODULES([TARGETSVC],   [libtargetsvc])
+PKG_CHECK_MODULES([TRANSPORT],   [libtransport])
+
+# Aggregate all dependency cflags/libs
+LIBS="$TARGETING_LIBS $HWACCESS_LIBS $TARGETSVC_LIBS $TRANSPORT_LIBS $LIBS"
+#CPPFLAGS="$TARGETING_CFLAGS $HWACCESS_CFLAGS $TARGETSVC_CFLAGS $TRANSPORT_CFLAGS $FDT_CFLAGS $CPPFLAGS"
+
 # Find path to libekb.H
 CPPFLAGS=$CXXFLAGS
 AX_ABSOLUTE_HEADER([libekb.H])

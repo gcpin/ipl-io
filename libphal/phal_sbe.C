@@ -120,8 +120,9 @@ void sbeHaltStateRecovery(struct pdbg_target* proc,
 
     // get SBE current state based on sbe message register
     sbeMsgReg_t sbeReg;
+    sbeReg.currState = SBE_STATE_HALT;
     fapi2::ReturnCode fapiRC;
-    fapiRC = p10_get_sbe_msg_register(proc, sbeReg);
+    //fapiRC = p10_get_sbe_msg_register(proc, sbeReg);
     if (fapiRC != fapi2::FAPI2_RC_SUCCESS)
     {
         log(level::ERROR, "Failed: checking SBE state in Halt (%s) fapiRC=%x",
@@ -141,7 +142,7 @@ void sbeHaltStateRecovery(struct pdbg_target* proc,
     setState(proc, SBE_STATE_CHECK_CFAM);
 
     // SBE is in Halt state, call p10_sbe_reset hwp and re-check state
-    fapiRC = p10_sbe_hreset(proc, true);
+    //fapiRC = p10_sbe_hreset(proc, true);
     if (fapiRC != fapi2::FAPI2_RC_SUCCESS)
     {
         log(level::ERROR, "failed hreset hwp(%s), fapiRC=%x",
@@ -153,7 +154,7 @@ void sbeHaltStateRecovery(struct pdbg_target* proc,
     sleep(5);
 
     // Check sbe current state using message register
-    fapiRC = p10_get_sbe_msg_register(proc, sbeReg);
+    //fapiRC = p10_get_sbe_msg_register(proc, sbeReg);
     if (fapiRC != fapi2::FAPI2_RC_SUCCESS)
     {
         log(level::ERROR, "Failed: Checking SBE state procedure (%s) fapiRC=%x",
