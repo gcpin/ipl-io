@@ -135,11 +135,12 @@ bool ipl_sbe_booted(TARGETING::TargetPtr target, uint32_t wait_time_seconds)
         {
 			if (sbeReg.sbeBooted)
             {
-                std::cout << "p12-refactor SBE Booted, wait time: " << loopcount << "\n";
-				ipl_log(IPL_INFO,
+                std::cout << std::dec 
+                          << "p12-refactor SBE Booted, wait time: " << loopcount << "\n";
+				/*ipl_log(IPL_INFO,
 					"SBE booted. sbeReg[0x%08x] Wait time: "
 					"[%d]\n",
-					uint32_t(sbeReg.reg), loopcount);
+					uint32_t(sbeReg.reg), loopcount);*/
 				return true;
 			}
             else

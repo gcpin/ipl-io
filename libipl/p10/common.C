@@ -56,7 +56,6 @@ bool ipl_is_master_proc(TARGETING::ConstTargetPtr proc)
         return false;
     }
 
-    std::cout << "p12-refactor PROC_MASTER_TYPE: " << static_cast<PROC_MASTER_TYPE>(val) << std::endl;
     return (static_cast<PROC_MASTER_TYPE>(val) == PROC_MASTER_TYPE_ACTING_MASTER);
 }
 
@@ -310,18 +309,18 @@ TARGETING::TargetPtr getFunctionalMasterProc(void)
                                     RecursionLevel::all, &masterFuncProcPred);
     if (targets.empty())
     {
-        std::cerr << "p12-refactor: functional master proc not found" << std::endl;
+        std::cerr << "p12-refactor functional master proc not found" << std::endl;
         return nullptr;
     }
 
     if (targets.size() != 1)
     {
-        std::cerr << "p12-refactor: Functional master procs Expected: 1 Found: "
+        std::cerr << "p12-refactor Functional master procs Expected: 1 Found: "
                   << targets.size() << std::endl;
         return nullptr;
     }
 
-    std::cout << "p12-refactor: getFunctionalMasterProc returning target" << std::endl;
+    //std::cout << "p12-refactor Functional MasterProc found" << std::endl;
 
     return targets.front();
 }
