@@ -192,23 +192,26 @@ int ipl_set_sbe_state_all(enum sbe_state state, bool skipMaster)
     int ret = 0;
     auto& ts = TargetService::instance();
 
-    PredicateAttrVal<ATTR_TYPE> pred(TYPE_PROC);
-
     auto top = ts.getTopLevelTarget();
+    
+    auto typeProc = std::make_shared<PredicateAttrVal<ATTR_TYPE>>(TYPE_PROC);
+    auto masterProc = std::make_shared<PredicateAttrVal<ATTR_PROC_MASTER_TYPE>>(0);
+    PredicatePostfixExpr predExpr;
+    
+    predExpr.push(typeProc);
 
+    if(skipMaster)
+    {
+        predExpr.push(masterProc).Not();
+    }
+   
     for (auto&& proc :
             ts.getAssociated(top, AssociationType::childByPhysical,
-                             RecursionLevel::all, &pred))
+                             RecursionLevel::all, &predExpr))
     {
-        if(skipMaster && ipl_is_master_proc(proc))
-            continue;
-
-		if (ipl_is_present(proc))
+		if (ipl_is_present(proc) && ipl_sbe_set_state(proc, state))
         {
-			if (ipl_sbe_set_state(proc, state))
-            {
-				ret = 1;
-			}
+			ret = 1;
 		}
 	}
 	return ret;

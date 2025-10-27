@@ -111,9 +111,9 @@ int ipl_istep_via_sbe(int major, int minor)
     /* TODO p12-refactor
 	struct pdbg_target *proc;
     uint64_t retry_limit_ms = 30 * 60 * 1000;
-	uint64_t delay_ms = 100;*/
+	uint64_t delay_ms = 100;
 	int rc = 1;
-    /*
+    
 	ipl_log(IPL_INFO, "Istep: Hostboot %d.%d : started\n", major, minor);
 
 	pdbg_for_each_class_target("proc", proc)
@@ -149,8 +149,8 @@ int ipl_istep_via_sbe(int major, int minor)
 		ipl_error_callback((rc == 0) ? IPL_ERR_OK : IPL_ERR_HWP);
 		break;
 	}
-*/
-	return rc;
+	return rc;*/
+    return 1;
 }
 
 [[maybe_unused]] bool ipl_sbe_booted(struct pdbg_target * /*proc*/, uint32_t /*wait_time_seconds*/)

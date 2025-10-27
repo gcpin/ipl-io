@@ -611,7 +611,8 @@ static bool update_genesis_hwas_state(void)
     auto& ts = TargetService::instance();
     auto top = ts.getTopLevelTarget();
 
-    PredicateAttrVal<ATTR_TYPE> pred(TYPE_PROC);
+    PredicatePostfixExpr procExpr;
+    procExpr.push(std::make_shared<PredicateAttrVal<ATTR_TYPE>>(TYPE_PROC));
 
     auto isMc = std::make_shared<PredicateAttrVal<ATTR_TYPE>>(TYPE_MC);
     auto isCore = std::make_shared<PredicateAttrVal<ATTR_TYPE>>(TYPE_CORE);
@@ -633,7 +634,7 @@ static bool update_genesis_hwas_state(void)
 
     for (auto&& proc :
             ts.getAssociated(top, AssociationType::childByPhysical,
-                             RecursionLevel::all, &pred))
+                             RecursionLevel::all, &procExpr))
     {
 		if (!set_or_clear_state(proc, true))
         {
@@ -644,22 +645,33 @@ static bool update_genesis_hwas_state(void)
 			ipl_error_callback(IPL_ERR_ATTR_WRITE);*/
 			return false;
 		}
-        if(!ipl_is_master_proc(proc))
-                continue;
+    }
 
-        for (auto&& pchild :
-                ts.getAssociated(proc, AssociationType::childByPhysical,
-                                 RecursionLevel::all, &expr))
+    //the master proc
+    procExpr.push(std::make_shared<PredicateAttrVal<ATTR_PROC_MASTER_TYPE>>(0))
+            .And();
+
+    auto master_proc = ts.getAssociated(proc, AssociationType::childByPhysical,
+                             RecursionLevel::all, &procExpr);
+    
+    if(master_proc.empty() || (master_proc.size() != 1))
+    {
+        std::cerr << "p12-refactor update_genesis_hwas_state: invalid master proc count\n";
+        return 1;
+    }
+
+    for (auto&& pchild :
+            ts.getAssociated(master_proc.front(), AssociationType::childByPhysical,
+                             RecursionLevel::all, &expr))
+    {
+        if (!set_or_clear_state(pchild,true))
         {
-            if (!set_or_clear_state(pchild,true))
-            {
-                /*TODO ipl_log(IPL_ERROR,
-                    "Failed to set HWAS state of "
-                    "%s, index %d\n",
-                    data, pdbg_target_index(child));
-                ipl_error_callback(IPL_ERR_ATTR_WRITE);*/
-                return false;
-			}
+            /*TODO ipl_log(IPL_ERROR,
+                "Failed to set HWAS state of "
+                "%s, index %d\n",
+                data, pdbg_target_index(child));
+            ipl_error_callback(IPL_ERR_ATTR_WRITE);*/
+            return false;
         }
     }
 
@@ -1108,31 +1120,38 @@ try
     auto& ts = TargetService::instance();
     auto top = ts.getTopLevelTarget();
 
-    PredicateAttrVal<ATTR_TYPE> pred(TYPE_PROC);
-
-    for (auto&& proc :
-            ts.getAssociated(top, AssociationType::childByPhysical,
-                             RecursionLevel::all, &pred))
+    auto typeProc = std::make_shared<PredicateAttrVal<ATTR_TYPE>>(TYPE_PROC);
+    auto masterProc = std::make_shared<PredicateAttrVal<ATTR_PROC_MASTER_TYPE>>(0);
+    auto isFunctional = std::make_shared<PredicateIsFunctional>();
+    
+    PredicatePostfixExpr pred;
+    pred.push(typeProc).push(masterProc).And()
+        .push(isFunctional).And();
+        
+    auto proc_target = ts.getAssociated(top, AssociationType::childByPhysical,
+                             RecursionLevel::all, &pred);
+ 
+    if(proc_target.empty() || (proc_target.size() != 1))
     {
-        if (!ipl_is_master_proc(proc) || !ipl_is_functional(proc))
-            continue;
+        std::cerr << "p12-refactor istep0.11 (proc_select_boot_prom): invalid master proc count\n";
+        return 1;
+    }
+    
+    fapi2::ReturnCode fapirc;
 
-		fapi2::ReturnCode fapirc;
+    /*TODO ipl_log(IPL_INFO,
+        "Running p10_select_boot_master HWP on processor %d\n",
+        pdbg_target_index(proc));*/
+    std::cout << "p12-refactor Executing HWP( p10_select_boot_master )\n";
 
-		/*TODO ipl_log(IPL_INFO,
-			"Running p10_select_boot_master HWP on processor %d\n",
-			pdbg_target_index(proc));*/
-        std::cout << "p12-refactor Executing HWP( p10_select_boot_master )\n";
-		fapirc = p10_select_boot_master(proc);
+    fapirc = p10_select_boot_master(proc_target.front());
 
-        std::cout << "p12-refactor Done HWP( p10_select_boot_master ) \n";
+    std::cout << "p12-refactor Done HWP( p10_select_boot_master ) \n";
 
-        if (fapirc == fapi2::FAPI2_RC_SUCCESS)
-			rc = 0;
+    if (fapirc == fapi2::FAPI2_RC_SUCCESS)
+        rc = 0;
 
-		//TODO ipl_process_fapi_error(fapirc, proc);
-		break;
-	}
+    //TODO ipl_process_fapi_error(fapirc, proc);
 }
 catch(const std::exception& ex)
 {
@@ -1236,18 +1255,21 @@ try
 		return 1;
 	}
 
+    auto isFunctional = std::make_shared<PredicateIsFunctional>();
+    auto typeProc = std::make_shared<PredicateAttrVal<ATTR_TYPE>>(TYPE_PROC);
+    auto masterProc = 
+            std::make_shared<PredicateAttrVal<ATTR_PROC_MASTER_TYPE>>(0); 
+    // 0 = master proc
 
-    PredicateAttrVal<ATTR_TYPE> pred(TYPE_PROC);
+    PredicatePostfixExpr pred;
+    pred.push(typeProc).push(masterProc).And()
+        .push(isFunctional).And();
 
     for (auto&& proc :
             ts.getAssociated(top, AssociationType::childByPhysical,
                              RecursionLevel::all, &pred))
     {
 		fapi2::ReturnCode fapirc;
-
-		// Run HWP only on functional master processor
-		if (!ipl_is_master_proc(proc) || !ipl_is_functional(proc))
-			continue;
 
         std::cout << "p12-refactor Executing HWP( p10_setup_sbe_config )\n";
 
@@ -1306,57 +1328,65 @@ try{
 			rc = ret;
 			continue;
 		}
+    }
+    
+    auto masterProc = std::make_shared<PredicateAttrVal<ATTR_PROC_MASTER_TYPE>>(0);
+    pred.push(masterProc).And();
+   
+    auto proc_target = ts.getAssociated(top, AssociationType::childByPhysical,
+                             RecursionLevel::all, &pred);
+ 
+    if(proc_target.empty() || (proc_target.size() != 1))
+    {
+        std::cerr << "p12-refactor istep0.14 ( sbe_start ): invalid master proc count\n";
+        return 1;
+    }
 
-        // Run HWP or MPIPL chip-op only on master processor in
-		// non cronus mode
-        if(ipl_is_master_proc(proc))
+    // Run HWP or MPIPL chip-op only on master processor in
+	// non cronus mode
+    if (ipl_type() == IPL_TYPE_MPIPL)
+    {
+        ipl_error_type err = ipl::sbe::ipl_sbe_mpipl_continue(proc_target.front());
+        ipl_error_callback(err);
+        rc = err;
+    }
+    else
+    {
+        //ipl_error_type err_type = IPL_ERR_OK;
+
+        std::cout << "p12-refactor Executing HWP( start_cbs )\n";
+        fapirc = p10_start_cbs(proc_target.front(), true);
+
+        std::cout << "p12-refactor Done HWP( start_cbs )\n";
+        if (fapirc == fapi2::FAPI2_RC_SUCCESS)
         {
-			if (ipl_type() == IPL_TYPE_MPIPL)
+            // Update Primary processor SBE state to
+            // check cfam. Boot error callback is
+            // only required for failure.
+            using namespace ipl::sbe;
+            ipl_sbe_set_state(proc_target.front(), ipl::sbe::SBE_STATE_CHECK_CFAM);
+
+            if (!ipl_sbe_booted(proc_target.front(), 25))
             {
-				ipl_error_type err = ipl::sbe::ipl_sbe_mpipl_continue(proc);
-				ipl_error_callback(err);
-				rc = err;
-			}
+                std::cout << "p12-refactor istep0.14 ( sbe_start ): sbe failed to boot\n";
+                //err_type = IPL_ERR_SBE_BOOT;
+            }
             else
             {
-				//ipl_error_type err_type = IPL_ERR_OK;
-
-                std::cout << "p12-refactor Executing HWP( start_cbs )\n";
-				fapirc = p10_start_cbs(proc, true);
-
-                std::cout << "p12-refactor Done HWP( start_cbs )\n";
-                if (fapirc == fapi2::FAPI2_RC_SUCCESS)
-                {
-					// Update Primary processor SBE state to
-					// check cfam. Boot error callback is
-					// only required for failure.
-                    using namespace ipl::sbe;
-					ipl_sbe_set_state(proc, ipl::sbe::SBE_STATE_CHECK_CFAM);
-
-                    if (!ipl_sbe_booted(proc, 25))
-                    {
-                        std::cout << "p12-refactor istep0.14 ( sbe_start ): sbe failed to boot\n";
-						//err_type = IPL_ERR_SBE_BOOT;
-					}
-                    else
-                    {
-						// Update Primary processor SBE
-						// state to booted Boot error
-						// callback is only required for
-						// failure.
-						ipl_sbe_set_state(proc, ipl::sbe::SBE_STATE_BOOTED);
-						rc = 0;
-					}
-				}
-                else
-                {
-					//err_type = IPL_ERR_HWP;
-				}
-				//ipl_error_callback(err_type);
-				break;
-			}
-		}
-	}
+                // Update Primary processor SBE
+                // state to booted Boot error
+                // callback is only required for
+                // failure.
+                ipl_sbe_set_state(proc_target.front(), ipl::sbe::SBE_STATE_BOOTED);
+                rc = 0;
+            }
+        }
+        else
+        {
+            //err_type = IPL_ERR_HWP;
+        }
+        //ipl_error_callback(err_type);
+    }
 
 	if (!rc)
     {
